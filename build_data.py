@@ -74,7 +74,9 @@ def make_data(articles_dir, metadata_path, output_dir, type='dev'):
     articles = read_articles(articles_dir)
     print('Total articles: {}'.format(len(articles)))
 
+    print("Extracting sentences...")
     extact_sentences(metadata, articles)
+    print('Extraction finished.')
 
     with open(join(output_dir, '{}.pickle'.format(type)), 'wb') as f:
         pickle.dump(metadata, f)

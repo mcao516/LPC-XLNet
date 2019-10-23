@@ -67,11 +67,11 @@ OUTPUT_DIR = '/usr/local/'
 
 
 # for testing purpose
-#METADATA_FILEPATH = 'dataset/metadata.json'
-#ARTICLES_FILEPATH = 'dataset/articles'
-#DATA_DIR = 'dataset/'
-#MODEL_DIR = 'model/'
-#OUTPUT_DIR = './'
+METADATA_FILEPATH = 'test/metadata.json'
+ARTICLES_FILEPATH = 'test/articles'
+DATA_DIR = 'test/'
+MODEL_DIR = 'model/'
+OUTPUT_DIR = './'
 
 
 def set_seed(args):
@@ -103,7 +103,6 @@ def evaluate(args, model, tokenizer, prefix=""):
         logger.info("***** Running evaluation {} *****".format(prefix))
         logger.info("  Num examples = %d", len(eval_dataset))
         logger.info("  Batch size = %d", args.eval_batch_size)
-        eval_loss = 0.0
         nb_eval_steps = 0
         preds = None
         guids = None
@@ -118,9 +117,8 @@ def evaluate(args, model, tokenizer, prefix=""):
                           'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,  # XLM and RoBERTa don't use segment_ids
                           'labels':         None}
                 outputs = model(**inputs)
-                tmp_eval_loss, logits = outputs[:2]
+                logits = outputs[0]
 
-                eval_loss += tmp_eval_loss.mean().item()
             nb_eval_steps += 1
 
             if guids is None:
@@ -133,7 +131,6 @@ def evaluate(args, model, tokenizer, prefix=""):
             else:
                 preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
 
-        eval_loss = eval_loss / nb_eval_steps
         if args.output_mode == "classification":
             preds = np.argmax(preds, axis=1)
         elif args.output_mode == "regression":
@@ -270,7 +267,7 @@ def main():
     args.device = device
 
     # Setup logging
-    logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
+    logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s - %(message)s',
                         datefmt = '%m/%d/%Y %H:%M:%S',
                         level = logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
     logger.warning("Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
@@ -296,7 +293,6 @@ def main():
     logger.info("Training/evaluation parameters %s", args)
 
     # Evaluation
-    results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
@@ -310,10 +306,7 @@ def main():
             tokenizer = tokenizer_class.from_pretrained(checkpoint)
 
             model.to(args.device)
-            result = evaluate(args, model, tokenizer, prefix=global_step)
-            result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
-            results.update(result)
-    return results
+            evaluate(args, model, tokenizer, prefix=global_step)
 
 
 if __name__ == "__main__":
