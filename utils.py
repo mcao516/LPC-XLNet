@@ -56,11 +56,10 @@ class InputExample(object):
 class InputFeatures(object):
     """A single set of features of data."""
 
-    def __init__(self, input_ids, input_mask, segment_ids, label_id, guid):
+    def __init__(self, input_ids, input_mask, segment_ids, guid):
         self.input_ids = input_ids
         self.input_mask = input_mask
         self.segment_ids = segment_ids
-        self.label_id = label_id
         self.guid = guid
 
 
@@ -255,9 +254,8 @@ class LpcProcessor(DataProcessor):
             guid = "%s" % (m['id'])
             text_a = m['claim']
             text_b = ' '.join(m['related_sentences'])
-            label = str(m['label'])
             examples.append(
-                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+                InputExample(guid=guid, text_a=text_a, text_b=text_b))
         return examples
 
 
@@ -502,8 +500,6 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         `cls_token_segment_id` define the segment id associated to the CLS token (0 for BERT, 2 for XLNet)
     """
 
-    label_map = {label : i for i, label in enumerate(label_list)}
-
     features = []
     for (ex_index, example) in enumerate(examples):
         if ex_index % 10000 == 0:
@@ -581,13 +577,6 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         assert len(input_mask) == max_seq_length
         assert len(segment_ids) == max_seq_length
 
-        if output_mode == "classification":
-            label_id = label_map[example.label]
-        elif output_mode == "regression":
-            label_id = float(example.label)
-        else:
-            raise KeyError(output_mode)
-
         guid = int(example.guid)
 
         if ex_index < 5:
@@ -595,18 +584,17 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
             logger.info("guid: %s" % (example.guid))
             logger.info("text_a: %s" % (example.text_a))
             logger.info("text_b: %s" % (example.text_b))
+            logger.info("Label: %s" % (example.label))
             logger.info("tokens: %s" % " ".join(
                     [str(x) for x in tokens]))
             logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
             logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
             logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-            logger.info("label: %s (id = %d)" % (example.label, label_id))
 
         features.append(
                 InputFeatures(input_ids=input_ids,
                               input_mask=input_mask,
                               segment_ids=segment_ids,
-                              label_id=label_id,
                               guid=guid))
     return features
 
@@ -706,6 +694,7 @@ def compute_metrics(task_name, preds, labels):
         return acc_and_macro_f1(preds, labels)
     else:
         raise KeyError(task_name)
+
 
 processors = {
     "cola": ColaProcessor,

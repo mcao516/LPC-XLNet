@@ -3,14 +3,11 @@
 
 import json
 import pickle
-import numpy as np
 
 from os import listdir
 from os.path import isfile, join
 
 from nltk.tokenize import sent_tokenize
-
-from sklearn import feature_extraction
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -20,6 +17,7 @@ def read_article(path):
     with open(path, 'r', encoding='utf-8') as f:
         return f.read()
 
+
 def read_articles(data_dir):
     articles = {}
     for f in listdir(data_dir):
@@ -27,6 +25,7 @@ def read_articles(data_dir):
         if isfile(path):
             articles[f] = read_article(path)
     return articles
+
 
 def read_metadata(path):
     with open(path, 'r') as f:

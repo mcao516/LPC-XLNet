@@ -25,27 +25,24 @@ import random
 
 import numpy as np
 import torch
-from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
-                              TensorDataset)
+from torch.utils.data import (DataLoader, SequentialSampler, TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm, trange
+from tqdm import tqdm
 
 from transformers import (WEIGHTS_NAME, BertConfig,
-                                  BertForSequenceClassification, BertTokenizer,
-                                  RobertaConfig,
-                                  RobertaForSequenceClassification,
-                                  RobertaTokenizer,
-                                  XLMConfig, XLMForSequenceClassification,
-                                  XLMTokenizer, XLNetConfig,
-                                  XLNetForSequenceClassification,
-                                  XLNetTokenizer)
+                          BertForSequenceClassification, BertTokenizer,
+                          RobertaConfig,
+                          RobertaForSequenceClassification,
+                          RobertaTokenizer,
+                          XLMConfig, XLMForSequenceClassification,
+                          XLMTokenizer, XLNetConfig,
+                          XLNetForSequenceClassification,
+                          XLNetTokenizer)
 
-from transformers import AdamW, WarmupLinearSchedule
-
-from utils import (compute_metrics, convert_examples_to_features,
-                        output_modes, processors)
+from utils import (convert_examples_to_features,
+                   output_modes, processors)
 from build_data import make_data
+
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +107,7 @@ def evaluate(args, model, tokenizer, prefix=""):
         nb_eval_steps = 0
         preds = None
         guids = None
-        out_label_ids = None
+        
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
             model.eval()
             batch = tuple(t.to(args.device) for t in batch)
@@ -119,7 +116,7 @@ def evaluate(args, model, tokenizer, prefix=""):
                 inputs = {'input_ids':      batch[0],
                           'attention_mask': batch[1],
                           'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,  # XLM and RoBERTa don't use segment_ids
-                          'labels':         batch[3]}
+                          'labels':         None}
                 outputs = model(**inputs)
                 tmp_eval_loss, logits = outputs[:2]
 
@@ -127,32 +124,21 @@ def evaluate(args, model, tokenizer, prefix=""):
             nb_eval_steps += 1
 
             if guids is None:
-                guids = batch[4].detach().cpu().numpy()
+                guids = batch[3].detach().cpu().numpy()
             else:
-                guids = np.append(guids, batch[4].detach().cpu().numpy())
+                guids = np.append(guids, batch[3].detach().cpu().numpy())
 
             if preds is None:
                 preds = logits.detach().cpu().numpy()
-                out_label_ids = inputs['labels'].detach().cpu().numpy()
             else:
                 preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-                out_label_ids = np.append(out_label_ids, inputs['labels'].detach().cpu().numpy(), axis=0)
 
         eval_loss = eval_loss / nb_eval_steps
         if args.output_mode == "classification":
             preds = np.argmax(preds, axis=1)
         elif args.output_mode == "regression":
             preds = np.squeeze(preds)
-        result = compute_metrics(eval_task, preds, out_label_ids)
-        results.update(result)
 
-        # output_eval_file = os.path.join(eval_output_dir, "eval_results.txt")
-        # with open(output_eval_file, "w") as writer:
-        #     logger.info("***** Eval results {} *****".format(prefix))
-        #     for key in sorted(result.keys()):
-        #         logger.info("  %s = %s", key, str(result[key]))
-        #         writer.write("%s = %s\n" % (key, str(result[key])))
-        
         output_eval_file = os.path.join(eval_output_dir, "predictions.txt")
         with open(output_eval_file, "w") as writer:
             logger.info("***** Prediction results {} *****".format(prefix))
@@ -206,13 +192,9 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
     all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
     all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
-    if output_mode == "classification":
-        all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.long)
-    elif output_mode == "regression":
-        all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.float)
     all_guids = torch.tensor([f.guid for f in features], dtype=torch.long)
 
-    dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_guids)
+    dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_guids)
     return dataset
 
 
@@ -303,8 +285,6 @@ def main():
         raise ValueError("Task not found: %s" % (args.task_name))
     processor = processors[args.task_name]()
     args.output_mode = output_modes[args.task_name]
-    label_list = processor.get_labels()
-    num_labels = len(label_list)
 
     # Load pretrained model and tokenizer
     if args.local_rank not in [-1, 0]:
@@ -333,7 +313,6 @@ def main():
             result = evaluate(args, model, tokenizer, prefix=global_step)
             result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
             results.update(result)
-    	
     return results
 
 
